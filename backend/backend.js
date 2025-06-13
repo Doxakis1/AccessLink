@@ -3,6 +3,235 @@ const https = require('https');
 const express = require('express');
 
 const app = express();
+const logged_in_users = [];
+const distress_signal_list = [];
+
+//TODO: HASH THE USER PASSWORDS
+//const filteredNumbers = numbers.filter(num => num !== 20); // Removes 20
+
+class acDistressSignal {
+   constructor(params)
+   {
+      this.user_location_lat = params.user_location_lat;
+      this.user_location_mag = params.user_location_mag;
+      this.buffer = new SharedArrayBuffer(4); // 4 bytes for an Int32
+      this.got_help = new Int32Array(this.buffer); // Atomic integer
+      this.name = params.name;
+      this.session_id = params.session_id;
+   }
+}
+
+class acResponse {
+   constructor(res, reas)
+   {
+      this.response = res;
+      this.reason = reas;
+   }
+}
+
+class acUser {
+   name =  ""; // name
+   email =  ""; // name
+   session_id = ""; //session_id
+   password = "";  //password
+   user_location_lat = ""; //user_location_lat
+   user_location_mag = ""; //user_location_mag
+   user_availability = "false"; // default false and yes... string lol
+   extra_params = []; // for future usage.
+   constructor(params){
+      for (const key of params){
+         if (key === "name")
+         {
+            this.name = params[key];
+         }
+         else if (key === "email")
+            this.email = params[key];
+         else if (key === "password")
+            this.password = params[key];
+         else if (key === "user_availability")
+            this.user_availability = params[key];
+         else {
+            this.extra_params.key = params[key];
+         }
+      }
+      this.session_id = crypto.randomUUID();
+   }
+}
+
+function userSignUp(params){
+   if (!("email" in params) || !("password" in params))
+   {
+      return new acResponse("false", "Incomplete sign up form");
+   }
+   for (user of logged_in_users){
+      if (params.email === user.email)
+      {
+         return new acResponse("false", "User email already registered");
+      }
+   }
+   new_user = new acUser(params);
+   logged_in_users.push(new_user);
+   return new acResponse("true", new_user.session_id);
+}
+
+
+function userUpdateLocation(params){
+   if (!("email" in params) || !("session_id" in params) || !("user_location_lat" in params) || !("user_location_mag" in params))
+   {
+      return new acResponse("false", "Faulty location update");
+   }
+   for (user of logged_in_users){
+      if (params.email === user.email)
+      {
+         if (params.new_session_id !== user.session_id)
+            return new acResponse("false", "Faulty location update");
+         user.user_location_lat = params.user_location_lat;
+         user.user_location_mag = params.user_location_mag;
+         return new acResponse("true", "User location was updated successfully");
+      }
+   }
+   return new acResponse("false", "Faulty location update");
+}
+
+function userUpdateAvailability(params){
+   if (!("email" in params) || !("session_id" in params) || !("user_availability" in params)){
+      return new acResponse("false", "Faulty availability update");
+   }
+   for (user of logged_in_users){
+      if (params.email === user.email)
+      {
+         user.user_availability = params.user_availability;
+         return new acResponse("true", "Availability was updated successfully");
+      }
+   }
+   return new acResponse("false", "Faulty availability update");
+}
+
+function userSignal(params){
+   if (!("email" in params) || !("session_id" in params) || !("user_location_lat" in params) || !("user_location_mag" in params))
+   {
+      return new acResponse("false", "Incomplete signal formation");
+   }
+   for (user of logged_in_users){
+      if (params.email === user.email)
+      {
+         if (params.session_id !== user.session_id){
+            return new acResponse("false", "Incomplete signal formation"); //TODO: consider allowing all signals anyways
+         }
+         distress_signal_list.push(new acDistressSignal(params));
+         return new acResponse("true", "Stress singal registed, sit tight, help is coming");
+      }
+   }
+   return new acResponse("false", "Incomplete signal form");
+}
+
+function userRemoveSignal(params){
+   if (!("email" in params) || !("session_id" in params))
+   {
+      return new acResponse("false", "Incomplete signal removal formation");
+   }
+   for (signal of distress_signal_list){
+      if (signal.session_id === user.session_id && signal.name === user.name)
+      {
+         distress_signal_list = distress_signal_list.filter(sig => sig.session_id !== signal.session_id); // Removes sig
+         return new acResponse("true", "Stress singal removed successfully");
+      }
+   }
+   return new acResponse("false", "Incorrect signal removal formation");
+}
+
+function userRespondSignal(params){
+   if (!("email" in params) || !("session_id" in params) || !("signal_session_id" in params))
+   {
+      return new acResponse("false", "Incomplete signal response formation");
+   }
+   for (signal of distress_signal_list) {
+    if (signal.session_id === user.signal_session_id) {
+        Atomics.add(signal.got_help, 0, 1); //TODO: ask if this is the best way
+        return new acResponse("true", "Successfully responded to signal");
+    }
+}
+   return new acResponse("false", "Incorrect signal response formation");
+}
+
+function userLogin(params){
+   if (!("email" in params) || !("password" in params))
+   {
+      return new acResponse("false", "Incomplete log in form");
+   }
+   for (user of logged_in_users){
+      if (params.email === user.email)
+      {
+         if (params.password !== user.password){
+            return new acResponse("false", "Failed to log in");
+         }
+         user.session_id = crypto.randomUUID();
+         new_session_id = user.session_id;
+         return new acResponse("true", new_session_id);
+      }
+   }
+   return new acResponse("false", "Failed to log in");
+}
+
+// cookie stuff:
+//document.cookie = "username=John Doe; expires=Thu, 18 Dec 2013 12:00:00 UTC; path=/";
+class acReq {
+   valid_req_types = ["login", "sign_up", "signal", "ask_ai", "update_location", "update_availability", "remove_signal", "respond_signal"];
+   req_type =  ""; // request_type
+   session_id = ""; //session_id
+   extra_params = {}; // for future usage.
+   is_valid_req = true;
+   constructor(params){
+      for (const key in params){
+         if (key === "request_type")
+         {
+            this.req_type = params[key];
+         }
+         else if (key === "session_id")
+            this.session_id = params[key];
+         else {
+            this.extra_params.key = params[key];
+         }
+      }
+      if (!(this.req_type in this.valid_req_types)){
+         this.is_valid_req = false;
+         return ;
+      }
+   }
+   handleRequest(){
+      // valid_req_types = ["login", "sign_up", "signal", "ask_ai"];
+      request_ret = {};
+      switch (this.req_type){
+         case "login":
+            request_ret = userLogin(this.extra_params);
+            break;
+         case "sign_up":
+            request_ret = userSignUp(this.extra_params);
+            break;
+         case "update_location":
+            request_ret = userUpdateLocation(this.extra_params);
+            break;
+         case "update_availability":
+            request_ret = userUpdateAvailability(this.extra_params);
+            break;
+         case "signal":
+            request_ret = userSignal();
+            break;
+         case "remove_signal":
+            request_ret = userRemoveSignal();
+            break;
+         case "respond_signal":
+            request_ret = userRespondSignal();
+            break;
+         case "ask_ai":
+            // request_ret = userAskAI();
+            break;
+      }
+      return request_ret;
+
+   }
+
+}
 
 app.use(express.urlencoded({ extended: true }));
 
@@ -13,17 +242,18 @@ const options = {
 };
 
 app.get('/app', function(req, res){
-   console.log(JSON.parse(JSON.stringify(req.query)));
-   console.log(req.query);		
-   console.log("Query parameters:", req.body);
- //  res.send("Hello world via HTTPS!");
-   res.send(`
-        <form method="POST" action="/app">
-            <label>Name: <input type="text" name="name" required></label><br><br>
-            <label>Age: <input type="number" name="age" required></label><br><br>
-            <button type="submit">Submit</button>
-        </form>
-    `);
+   const data = JSON.parse(JSON.stringify(req.query));
+   if ( data === undefined ||  Object.keys(data).length === 0)
+   {
+      res.send(`{success: "false", error_message: "Invalid request data"}`);
+   }
+   const new_request = acReq(data);
+   if (new_request.is_valid_req === false)
+   {
+      res.send(`{success: "false", error_message: "Unknown request type"}`);
+   }
+   request_ret = new_request.handleRequest();
+   res.send(request_ret);
 });
 
 app.post('/app', function(req, res){
