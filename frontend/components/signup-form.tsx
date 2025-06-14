@@ -167,7 +167,7 @@ export default function SignupForm() {
       // Simulate API call
       const request_sign_up = await apiClient.signUp(email, name, password);
       if (request_sign_up.response == "false") {
-        throw new Error("API call failed")
+        throw new Error("API call failed with server response:" + request_sign_up.response)
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1500))
