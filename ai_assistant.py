@@ -6,19 +6,18 @@ import geocoder
 #from shake_detector import ShakeDetector
 import threading
 import pyttsx3
-import ast
 import json
+import re
 
 # Configuration
-GOOGLE_API_KEY = "your_api_key"  # Replace with your actual Google API key
-TWILIO_SID = "your_sid"
-TWILIO_TOKEN = "your_token"
-EMERGENCY_CONTACTS = ["+305367758589"]
+-GOOGLE_API_KEY = "your_api_key"  # Replace with your actual Google API key
+-TWILIO_SID = "your_sid" # Replace with your actual Twilio SID
+-TWILIO_TOKEN = "your_token" # Replace with your actual Twilio Auth Token
+-EMERGENCY_CONTACTS = ["+305367758589"] # Replace with actual emergency contact numbers
 
 # Initialize services
 genai.configure(api_key=GOOGLE_API_KEY)
 preferred_models = ["gemini-pro", "gemini-1.0-pro", "gemini-1.5-pro", "gemini-pro-vision"]
-model = None
 tts_engine = pyttsx3.init()
 recognizer = sr.Recognizer()
 twilio_client = Client(TWILIO_SID, TWILIO_TOKEN)
@@ -63,7 +62,12 @@ class VoiceAssistant:
                 text = recognizer.recognize_google(audio)
                 print(f"Recognized: {text}")
                 return text
-            except:
+            except sr.UnknownValueError:
+                print("Could not understand audio.")
+                self.speak("Could not understand audio.")
+                return ""
+            except sr.RequestError as e:
+                print(f"Speech recognition error: {e}")
                 return ""
 
     def emergency_trigger(self):
@@ -75,9 +79,9 @@ class VoiceAssistant:
     def send_emergency_alerts(self):
         """Send SMS alerts with location"""
         for number in EMERGENCY_CONTACTS:
-            message = twilio_client.messages.create(
+            twilio_client.messages.create(
                 body=f"EMERGENCY ALERT! User needs help at {self.current_location}",
-                from_='+1234567890',
+                from_='+144678812345',  # Replace with your Twilio number
                 to=number
             )
 
@@ -94,33 +98,21 @@ class VoiceAssistant:
         )
         response = model.generate_content(prompt)
         print(f"AI Response: {response.text}")
-        parsed_response = {}
         try:
-            response_stripped = response.text.split('{')[1]
-            response_stripped = response_stripped.split('}')[0]
-            for elem in response_stripped('\",'):
-                elem += '"'
-                elem_outer = elem.split(':')[0]
-                print(f"Outer Element: {elem_outer}")
-                elem_inner = elem.split(':')[1]
-                print(f"Inner Element: {elem_inner}")
-                parsed_response[elem_outer] = elem_inner
-            print(f"Parsed Response: {parsed_response}")
-            return {"action": parsed_response["action"], "response": parsed_response["response"]}
-            return json.loads(response.text)  # Safely parse the AI's JSON response
-            # return ast.literal_eval(response.text)  # Safely evaluate the AI's resp~onse
-            # return response.text
-            # Safely parse the AI's JSON response
-            # import json
-            # return json.loads(response.text)
+            parsed_response = safe_json_parse(response.text)
+            return parsed_response
         except Exception as e:
             print(f"AI response error: {e}")
             return {"action": "unknown", "response": "Sorry, I didn't understand."}
 
     def handle_updates(self):
         """Fetch accessibility-related updates"""
-        updates = requests.get("YOUR_UPDATES_API_URL").json()
-        self.speak("Latest updates: " + updates['summary'])
+        try:
+            updates = requests.get("YOUR_UPDATES_API_URL").json()
+            self.speak("Latest updates: " + updates.get('summary', 'No updates available.'))
+        except Exception as e:
+            print(f"Update fetch error: {e}")
+            self.speak("Sorry, I couldn't fetch updates.")
 
     def main_loop(self):
         """Main interaction loop"""
@@ -138,6 +130,29 @@ class VoiceAssistant:
                     self.handle_updates()
                 # Add other actions here
                 self.speak(action['response'])
+
+def safe_json_parse(response_text):
+    # Remove code block markers if present
+    response_text = response_text.strip()
+    if response_text.startswith("```"):
+        # Remove the code block markers and language hint
+        response_text = re.sub(r"^```json|^```", "", response_text, flags=re.IGNORECASE).strip()
+        response_text = response_text.rstrip("`").strip()
+    # Now extract the JSON object
+    match = re.search(r'\{.*\}', response_text, re.DOTALL)
+    if match:
+        json_str = match.group(0)
+        print(f"Extracted JSON string: {json_str}")  # Print the JSON string for testing
+        try:
+            parsed = json.loads(json_str)
+            print(f"Parsed JSON object: {parsed}")   # Print the parsed object for testing
+            return parsed
+        except Exception as e:
+            print(f"JSON decode error: {e}")
+    else:
+        print(f"No JSON object found in input: {response_text}")
+    print("Failed to parse valid JSON from response.")
+    return {"action": "unknown", "response": "Sorry, I didn't understand."}
 
 if __name__ == "__main__":
     assistant = VoiceAssistant()
