@@ -1,0 +1,7 @@
+{
+  "name": "accessibility-app",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react"
+}
