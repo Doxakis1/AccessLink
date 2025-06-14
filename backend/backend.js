@@ -239,14 +239,17 @@ class acReq {
             this.extra_params.key = params[key];
          }
       }
-      if (!(this.req_type in this.valid_req_types)){
+	  console.log(this.req_type);
+	  console.log(this.valid_req_types);
+      if
+		  (!this.valid_req_types.includes(this.req_type)){
          this.is_valid_req = false;
          return ;
       }
    }
    async handleRequest(){
       // valid_req_types = ["login", "sign_up", "signal", "ask_ai"];
-      request_ret = {};
+      let request_ret = {};
       switch (this.req_type){
          case "login":
             request_ret = await userLogin(this.extra_params);
@@ -293,12 +296,16 @@ app.get('/app', async function(req, res){
    {
       res.send(`{success: "false", error_message: "Invalid request data"}`);
    }
-   const new_request = acReq(data);
+   console.log(data)
+   const new_request = new acReq(data);
+   console.log(new_request);
    if (new_request.is_valid_req === false)
    {
       res.send(`{success: "false", error_message: "Unknown request type"}`);
+	  return ;
    }
    request_ret = await new_request.handleRequest();
+   console.log(request_ret);
    res.send(request_ret);
 });
 
