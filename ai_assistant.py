@@ -10,10 +10,10 @@ import json
 import re
 
 # Configuration
--GOOGLE_API_KEY = "your_api_key"  # Replace with your actual Google API key
--TWILIO_SID = "your_sid" # Replace with your actual Twilio SID
--TWILIO_TOKEN = "your_token" # Replace with your actual Twilio Auth Token
--EMERGENCY_CONTACTS = ["+305367758589"] # Replace with actual emergency contact numbers
+GOOGLE_API_KEY = "your_api_key"  # Replace with your actual Google API key
+TWILIO_SID = "your_sid" # Replace with your actual Twilio SID
+TWILIO_TOKEN = "your_token" # Replace with your actual Twilio Auth Token
+EMERGENCY_CONTACTS = ["+305367758589"] # Replace with actual emergency contact numbers
 
 # Initialize services
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -56,7 +56,7 @@ class VoiceAssistant:
         """Listen for voice commands"""
         with sr.Microphone() as source:
             print("Listening...")
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+            audio = recognizer.listen(source, timeout=3, phrase_time_limit=5)
             try:
                 print("Recognizing...")
                 text = recognizer.recognize_google(audio)
@@ -81,7 +81,7 @@ class VoiceAssistant:
         for number in EMERGENCY_CONTACTS:
             twilio_client.messages.create(
                 body=f"EMERGENCY ALERT! User needs help at {self.current_location}",
-                from_='+144678812345',  # Replace with your Twilio number
+                from_='+140000000035',  # Replace with your Twilio number
                 to=number
             )
 
