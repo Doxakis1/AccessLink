@@ -16,7 +16,7 @@ class acDistressSignal {
    {
       this.user_location_lat = params.user_location_lat;
       this.user_location_mag = params.user_location_mag;
-      this.got_help = 0; // Atomic integer
+      this.got_help = 0;
       this.name = params.name;
       this.session_id = params.session_id;
    }
@@ -60,7 +60,7 @@ class acUser {
 }
 
 async function userSignUp(params){
-   if (!("email" in params) || !("password" in params))
+   if (!(params.includes("email")) || !(params.includes("password")))
    {
       return new acResponse("false", "Incomplete sign up form");
    }
@@ -83,7 +83,7 @@ async function userSignUp(params){
 
 
 async function userUpdateLocation(params){
-   if (!("email" in params) || !("session_id" in params) || !("user_location_lat" in params) || !("user_location_mag" in params))
+   if (!["email", "session_id", "user_location_lat", "user_location_mag"].every(type => params.includes(type)))
    {
       return new acResponse("false", "Faulty location update");
    }
@@ -107,7 +107,8 @@ async function userUpdateLocation(params){
 }
 
 async function userUpdateAvailability(params){
-   if (!("email" in params) || !("session_id" in params) || !("user_availability" in params)){
+   if (!["email", "session_id", "user_availability", "user_location_mag"].every(type => params.includes(type)))
+   {
       return new acResponse("false", "Faulty availability update");
    }
    const release = await user_mutex.acquire(); 
@@ -127,7 +128,7 @@ async function userUpdateAvailability(params){
 }
 
 async function userSignal(params){
-   if (!("email" in params) || !("session_id" in params) || !("user_location_lat" in params) || !("user_location_mag" in params))
+   if (!["email", "session_id", "user_location_lat", "user_location_mag"].every(type => params.includes(type)))
    {
       return new acResponse("false", "Incomplete signal formation");
    }
@@ -153,7 +154,7 @@ async function userSignal(params){
 }
 
 async function userRemoveSignal(params){
-   if (!("email" in params) || !("session_id" in params))
+   if (!["email", "session_id"].every(type => params.includes(type)))
    {
       return new acResponse("false", "Incomplete signal removal formation");
    }
@@ -174,7 +175,7 @@ async function userRemoveSignal(params){
 }
 
 async function userRespondSignal(params){
-   if (!("email" in params) || !("session_id" in params) || !("signal_session_id" in params))
+   if (!["email", "session_id", "signal_session_id"].every(type => params.includes(type)))
    {
       return new acResponse("false", "Incomplete signal response formation");
    }
@@ -194,7 +195,7 @@ async function userRespondSignal(params){
 }
 
 async function userLogin(params){
-   if (!("email" in params) || !("password" in params))
+   if (!["email", "password"].every(type => params.includes(type)))
    {
       return new acResponse("false", "Incomplete log in form");
    }
@@ -313,6 +314,6 @@ app.post('/app', async function(req, res){
 
 // Create HTTPS server
 https.createServer(options, app).listen(8080, function() {
-   console.log('HTTPS Server running on port 3000');
+   console.log('HTTPS Server running on port 8080');
 });
 
