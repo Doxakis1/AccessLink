@@ -1,10 +1,12 @@
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
-
+const { Mutex } = require('async-mutex');
 const app = express();
 const logged_in_users = [];
 const distress_signal_list = [];
+const sig_mutex = new Mutex();
+const user_mutex = new Mutex();
 
 //TODO: HASH THE USER PASSWORDS
 //const filteredNumbers = numbers.filter(num => num !== 20); // Removes 20
@@ -14,8 +16,7 @@ class acDistressSignal {
    {
       this.user_location_lat = params.user_location_lat;
       this.user_location_mag = params.user_location_mag;
-      this.buffer = new SharedArrayBuffer(4); // 4 bytes for an Int32
-      this.got_help = new Int32Array(this.buffer); // Atomic integer
+      this.got_help = 0; // Atomic integer
       this.name = params.name;
       this.session_id = params.session_id;
    }
@@ -58,117 +59,161 @@ class acUser {
    }
 }
 
-function userSignUp(params){
+async function userSignUp(params){
    if (!("email" in params) || !("password" in params))
    {
       return new acResponse("false", "Incomplete sign up form");
    }
-   for (user of logged_in_users){
-      if (params.email === user.email)
-      {
-         return new acResponse("false", "User email already registered");
-      }
+   const release = await user_mutex.acquire(); 
+   try {
+      for (user of logged_in_users){
+            if (params.email === user.email)
+            {
+               return new acResponse("false", "User email already registered");
+            }
+         }
+      new_user = new acUser(params);
+      logged_in_users.push(new_user);
    }
-   new_user = new acUser(params);
-   logged_in_users.push(new_user);
+   finally {
+      release()
+   }
    return new acResponse("true", new_user.session_id);
 }
 
 
-function userUpdateLocation(params){
+async function userUpdateLocation(params){
    if (!("email" in params) || !("session_id" in params) || !("user_location_lat" in params) || !("user_location_mag" in params))
    {
       return new acResponse("false", "Faulty location update");
    }
-   for (user of logged_in_users){
-      if (params.email === user.email)
-      {
-         if (params.new_session_id !== user.session_id)
-            return new acResponse("false", "Faulty location update");
-         user.user_location_lat = params.user_location_lat;
-         user.user_location_mag = params.user_location_mag;
-         return new acResponse("true", "User location was updated successfully");
+   const release = await user_mutex.acquire(); 
+   try {
+      for (user of logged_in_users){
+         if (params.email === user.email)
+         {
+            if (params.new_session_id !== user.session_id)
+               return new acResponse("false", "Faulty location update");
+            user.user_location_lat = params.user_location_lat;
+            user.user_location_mag = params.user_location_mag;
+            return new acResponse("true", "User location was updated successfully");
+         }
       }
+   }
+   finally {
+      release()
    }
    return new acResponse("false", "Faulty location update");
 }
 
-function userUpdateAvailability(params){
+async function userUpdateAvailability(params){
    if (!("email" in params) || !("session_id" in params) || !("user_availability" in params)){
       return new acResponse("false", "Faulty availability update");
    }
-   for (user of logged_in_users){
-      if (params.email === user.email)
-      {
-         user.user_availability = params.user_availability;
-         return new acResponse("true", "Availability was updated successfully");
+   const release = await user_mutex.acquire(); 
+   try {
+      for (user of logged_in_users){
+         if (params.email === user.email)
+         {
+            user.user_availability = params.user_availability;
+            return new acResponse("true", "Availability was updated successfully");
+         }
       }
+   }
+   finally {
+      release()
    }
    return new acResponse("false", "Faulty availability update");
 }
 
-function userSignal(params){
+async function userSignal(params){
    if (!("email" in params) || !("session_id" in params) || !("user_location_lat" in params) || !("user_location_mag" in params))
    {
       return new acResponse("false", "Incomplete signal formation");
    }
-   for (user of logged_in_users){
-      if (params.email === user.email)
-      {
-         if (params.session_id !== user.session_id){
-            return new acResponse("false", "Incomplete signal formation"); //TODO: consider allowing all signals anyways
+   const release = await user_mutex.acquire(); 
+   try {
+      for (user of logged_in_users){
+         if (params.email === user.email)
+         {
+            if (params.session_id !== user.session_id){
+               return new acResponse("false", "Incomplete signal formation"); //TODO: consider allowing all signals anyways
+            }
+            const release_sig = await sig_mutex.acquire();
+            distress_signal_list.push(new acDistressSignal(params));
+            release_sig();
+            return new acResponse("true", "Stress singal registed, sit tight, help is coming");
          }
-         distress_signal_list.push(new acDistressSignal(params));
-         return new acResponse("true", "Stress singal registed, sit tight, help is coming");
       }
+   }
+   finally {
+      release()
    }
    return new acResponse("false", "Incomplete signal form");
 }
 
-function userRemoveSignal(params){
+async function userRemoveSignal(params){
    if (!("email" in params) || !("session_id" in params))
    {
       return new acResponse("false", "Incomplete signal removal formation");
    }
-   for (signal of distress_signal_list){
-      if (signal.session_id === user.session_id && signal.name === user.name)
-      {
-         distress_signal_list = distress_signal_list.filter(sig => sig.session_id !== signal.session_id); // Removes sig
-         return new acResponse("true", "Stress singal removed successfully");
+   const release = await sig_mutex.acquire(); 
+   try {
+      for (signal of distress_signal_list){
+         if (signal.session_id === user.session_id && signal.name === user.name)
+         {
+            distress_signal_list = distress_signal_list.filter(sig => sig.session_id !== signal.session_id); // Removes sig
+            return new acResponse("true", "Stress singal removed successfully");
+         }
       }
+   }
+   finally {
+      release()
    }
    return new acResponse("false", "Incorrect signal removal formation");
 }
 
-function userRespondSignal(params){
+async function userRespondSignal(params){
    if (!("email" in params) || !("session_id" in params) || !("signal_session_id" in params))
    {
       return new acResponse("false", "Incomplete signal response formation");
    }
-   for (signal of distress_signal_list) {
-    if (signal.session_id === user.signal_session_id) {
-        Atomics.add(signal.got_help, 0, 1); //TODO: ask if this is the best way
-        return new acResponse("true", "Successfully responded to signal");
-    }
-}
+   const release = await sig_mutex.acquire(); 
+   try {
+      for (signal of distress_signal_list) {
+      if (signal.session_id === user.signal_session_id) {
+         signal.got_help += 1;
+         return new acResponse("true", "Successfully responded to signal");
+      }
+      }
+   }
+   finally {
+      release()
+   }
    return new acResponse("false", "Incorrect signal response formation");
 }
 
-function userLogin(params){
+async function userLogin(params){
    if (!("email" in params) || !("password" in params))
    {
       return new acResponse("false", "Incomplete log in form");
    }
-   for (user of logged_in_users){
-      if (params.email === user.email)
-      {
-         if (params.password !== user.password){
-            return new acResponse("false", "Failed to log in");
+   const release = await user_mutex.acquire();
+   try {
+      for (user of logged_in_users){
+         if (params.email === user.email)
+         {
+            if (params.password !== user.password){
+               return new acResponse("false", "Failed to log in");
+            }
+            user.session_id = crypto.randomUUID();
+            new_session_id = user.session_id;
+            return new acResponse("true", new_session_id);
          }
-         user.session_id = crypto.randomUUID();
-         new_session_id = user.session_id;
-         return new acResponse("true", new_session_id);
       }
+   }
+   finally {
+      release()
    }
    return new acResponse("false", "Failed to log in");
 }
@@ -198,30 +243,30 @@ class acReq {
          return ;
       }
    }
-   handleRequest(){
+   async handleRequest(){
       // valid_req_types = ["login", "sign_up", "signal", "ask_ai"];
       request_ret = {};
       switch (this.req_type){
          case "login":
-            request_ret = userLogin(this.extra_params);
+            request_ret = await userLogin(this.extra_params);
             break;
          case "sign_up":
-            request_ret = userSignUp(this.extra_params);
+            request_ret = await userSignUp(this.extra_params);
             break;
          case "update_location":
-            request_ret = userUpdateLocation(this.extra_params);
+            request_ret = await userUpdateLocation(this.extra_params);
             break;
          case "update_availability":
-            request_ret = userUpdateAvailability(this.extra_params);
+            request_ret = await userUpdateAvailability(this.extra_params);
             break;
          case "signal":
-            request_ret = userSignal();
+            request_ret = await userSignal();
             break;
          case "remove_signal":
-            request_ret = userRemoveSignal();
+            request_ret = await userRemoveSignal();
             break;
          case "respond_signal":
-            request_ret = userRespondSignal();
+            request_ret = await userRespondSignal();
             break;
          case "ask_ai":
             // request_ret = userAskAI();
@@ -241,7 +286,7 @@ const options = {
   cert: fs.readFileSync('/etc/letsencrypt/live/www.codingwithdox.com/cert.pem')
 };
 
-app.get('/app', function(req, res){
+app.get('/app', async function(req, res){
    const data = JSON.parse(JSON.stringify(req.query));
    if ( data === undefined ||  Object.keys(data).length === 0)
    {
@@ -252,11 +297,11 @@ app.get('/app', function(req, res){
    {
       res.send(`{success: "false", error_message: "Unknown request type"}`);
    }
-   request_ret = new_request.handleRequest();
+   request_ret = await new_request.handleRequest();
    res.send(request_ret);
 });
 
-app.post('/app', function(req, res){
+app.post('/app', async function(req, res){
    const obj = req.body;		
    console.log("We got username: ", obj);
    if (obj?.name){
