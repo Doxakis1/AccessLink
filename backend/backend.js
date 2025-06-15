@@ -3,8 +3,8 @@ const https = require('https');
 const express = require('express');
 const { Mutex } = require('async-mutex');
 const app = express();
-const logged_in_users = [];
-const distress_signal_list = [];
+let logged_in_users = [];
+let distress_signal_list = [];
 const sig_mutex = new Mutex();
 const user_mutex = new Mutex();
 
@@ -163,21 +163,16 @@ async function userSignal(params){
 }
 
 async function userRemoveSignal(params){
-   if (!["email", "session_id"].every(type =>
+   if (!["session_id"].every(type =>
 			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Incomplete signal removal formation");
    }
    const release = await sig_mutex.acquire(); 
    try {
-      for (signal of distress_signal_list){
-         if (signal.session_id === user.session_id && signal.name === user.name)
-         {
-            distress_signal_list = distress_signal_list.filter(sig => sig.session_id !== signal.session_id); // Removes sig
+            distress_signal_list = distress_signal_list.filter(sig => sig.session_id !== params.session_id); // Removes sig
             return new acResponse("true", "Stress singal removed successfully");
          }
-      }
-   }
    finally {
       release()
    }
@@ -216,7 +211,27 @@ async function  userCheckDistress(params){
    finally {
       release()
    }
-   return new acResponse("false", "Incorrect request formation");
+   return new acResponse("false", "No distress information");
+}
+
+async function  userCheckStatus(params){
+   if (!["session_id"].every(type =>
+			   params.hasOwnProperty(type)))
+   {
+      return new acResponse("false", "Incomplete status check");
+   }
+   const release = await sig_mutex.acquire(); 
+   try {
+      for (signal of distress_signal_list) {
+		  if (singal.session_id ==
+				  params.session_id)
+         	return new acResponse("true", signal.session_id);
+      }
+   }
+   finally {
+      release()
+   }
+   return new acResponse("false", "No answer yet");
 }
 
 async function userLogin(params){
@@ -248,7 +263,8 @@ async function userLogin(params){
 // cookie stuff:
 //document.cookie = "username=John Doe; expires=Thu, 18 Dec 2013 12:00:00 UTC; path=/";
 class acReq {
-   valid_req_types = ["login","check_distress", "sign_up", "signal", "ask_ai", "update_location", "update_availability", "remove_signal", "respond_signal"];
+   valid_req_types =
+	   ["login","answer_distress","check_distress","check_status", "sign_up", "signal", "ask_ai", "update_location", "update_availability", "remove_signal", "respond_signal"];
    req_type =  ""; // request_type
    session_id = ""; //session_id
    extra_params = {}; // for future usage.
@@ -290,12 +306,23 @@ class acReq {
             break;
          case "remove_signal":
             request_ret = await userRemoveSignal(this.extra_params);
+   			console.log(request_ret);	
             break;
          case "respond_signal":
             request_ret = await userRespondSignal(this.extra_params);
+   			console.log(request_ret);
             break;
 		 case "check_distress":
 			request_ret = await userCheckDistress(this.extra_params);
+            break;
+		 case "answer_distress":
+			request_ret = await userRemoveSignal(this.extra_params);
+   			console.log(request_ret);
+            break;
+		 case "check_status":
+			request_ret = await userCheckStatus(this.extra_params);
+   			console.log(request_ret);
+            break;
          case "ask_ai":
             // request_ret = userAskAI();
             break;
@@ -326,16 +353,15 @@ app.get('/app', async function(req, res){
    {
    	  res.send(new acResponse("false", "Invalid request data"));
    }
-   console.log(data);
+   //console.log(data);
    const new_request = new acReq(data);
-   console.log(new_request);
+   //console.log(new_request);
    if (new_request.is_valid_req === false)
    {
    	  res.send(new acResponse("false", "Invalid request data"));
       return ;
    }
    request_ret = await new_request.handleRequest();
-   console.log(request_ret);
    res.send(request_ret);
 });
 
