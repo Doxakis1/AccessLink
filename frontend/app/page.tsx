@@ -5,8 +5,8 @@ import { useEffect } from "react"
 export default function RootPage() {
   useEffect(() => {
     // Check if initial setup has been completed
+    
     const initialSetupCompleted = localStorage.getItem("initialSetupCompleted")
-
     if (initialSetupCompleted === "true") {
       // If setup is completed, redirect to login
       window.location.href = "/login"

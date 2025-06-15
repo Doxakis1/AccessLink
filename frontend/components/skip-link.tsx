@@ -17,7 +17,7 @@ export function SkipLink() {
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
     >
-      Skip to main content
+      {/* Skip to main content */}
     </a>
   )
 }

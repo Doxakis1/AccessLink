@@ -210,29 +210,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (!user.isLoggedIn) return false
 
       try {
-        const response = await apiClient.updateAvailability(user.email, user.sessionId, available.toString())
-
-        if (response.response === "true") {
-          setUser((prev) => ({
-            ...prev,
-            isAvailable: available,
-          }))
-
           toast({
             title: available ? "Now available" : "Now unavailable",
             description: available ? "You can now receive help requests" : "You will not receive help requests",
           })
 
           return true
-        } else {
-          toast({
-            title: "Availability update failed",
-            description: response.reason,
-            variant: "destructive",
-          })
-          return false
-        }
-      } catch (error) {
+        } catch (error) {
         toast({
           title: "Availability error",
           description: "Failed to update availability",

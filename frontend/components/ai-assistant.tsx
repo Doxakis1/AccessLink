@@ -88,7 +88,7 @@ export default function AIAssistant() {
     }
 
     // Check if API key is available
-    if (!hasApiKey) {
+    if (hasApiKey) {
       setApiError("Gemini API key is missing. Please add NEXT_PUBLIC_GEMINI_API_KEY to your environment variables.")
     }
   }, [])

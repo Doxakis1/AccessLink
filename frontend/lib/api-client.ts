@@ -29,10 +29,9 @@ class ApiClient {
       const queryParams = new URLSearchParams(params).toString()
       const response = await fetch(`${API_BASE_URL}?${queryParams}`)
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
+      // if (!response.ok) {
+      //   throw new Error(`HTTP error! status: ${response.status}`)
+      // }
       const data = await response.json()
       return data
     } catch (error) {
@@ -82,6 +81,23 @@ class ApiClient {
       email,
       session_id: sessionId,
       user_availability: availability,
+    })
+  }
+  async answerToDistress(sessionId: string):  Promise<ApiResponse> {
+    return this.makeRequest({
+      request_type: "answer_distress",
+      session_id: sessionId,
+    })
+  }
+  async checkRequestStatus(sessionId: string):  Promise<ApiResponse> {
+    return this.makeRequest({
+      request_type: "check_status",
+      session_id: sessionId,
+    })
+  }
+  async checkForDistress(): Promise<ApiResponse> {
+    return this.makeRequest({
+      request_type: "check_distress",
     })
   }
 

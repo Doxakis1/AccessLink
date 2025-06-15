@@ -15,6 +15,7 @@ import { SkipLink } from "@/components/skip-link"
 import Link from "next/link"
 import { GoogleLoginButton } from "@/components/google-login-button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { apiClient } from "@/lib/api-client"
 
 interface FormErrors {
   email?: string
@@ -124,22 +125,31 @@ export default function LoginForm() {
 
     try {
       // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      // Check if user exists in localStorage (for demo purposes)
-      const users = JSON.parse(localStorage.getItem("users") || "[]")
-      const user = users.find((u: any) => u.email === email)
-
-      if (!user) {
+      const login_response = await apiClient.login(email, password)
+      if (login_response.response === "false"){
         throw new Error("Invalid email or password")
       }
 
       // In a real app, you would validate the password here
       // For demo purposes, we'll just accept any password
-
+      const saveProfile = () => {
+        localStorage.setItem(
+          "userProfile",
+          JSON.stringify({
+            displayName: email,
+            sessionID: login_response.reason,
+            avatar: null,
+            language: "en",
+            location: "Athens",
+            accessibilityNeeds: "",
+            bio: "",
+          }),
+        )
+      }
+      saveProfile()
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.name}!`,
+        description: `Welcome back, ${email}!`,
       })
 
       setStatusMessage("Login successful. Redirecting to home page.")
@@ -184,7 +194,7 @@ export default function LoginForm() {
             <CardHeader>
               {profile && profile.displayName && (
                 <div className="flex flex-col items-center mb-4">
-                  <Avatar className="w-16 h-16 mb-2">
+                  {/* <Avatar className="w-16 h-16 mb-2">
                     {profile.avatar ? (
                       <AvatarImage
                         src={profile.avatar || "/placeholder.svg"}
@@ -195,8 +205,8 @@ export default function LoginForm() {
                         {profile.displayName.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     )}
-                  </Avatar>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Welcome back, {profile.displayName}</p>
+                  </Avatar> */}
+                  {/* <p className="text-sm text-slate-600 dark:text-slate-400">Welcome back, {profile.displayName}</p> */}
                 </div>
               )}
               <CardTitle className="text-2xl text-center">Login</CardTitle>
@@ -318,12 +328,12 @@ export default function LoginForm() {
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t border-slate-300 dark:border-slate-600"></span>
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase">
+                  {/* <div className="relative flex justify-center text-xs uppercase">
                     <span className="bg-white dark:bg-slate-800 px-2 text-slate-500 dark:text-slate-400">Or</span>
-                  </div>
+                  </div> */}
                 </div>
 
-                <GoogleLoginButton mode="login" />
+                {/* <GoogleLoginButton mode="login" /> */}
 
                 <p className="text-center text-sm">
                   Don&apos;t have an account?{" "}

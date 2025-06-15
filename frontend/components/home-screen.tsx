@@ -8,20 +8,22 @@ import { useMobile } from "@/hooks/use-mobile"
 import { StatusAnnouncer } from "@/components/status-announcer"
 import { SkipLink } from "@/components/skip-link"
 import { useRouter } from "next/navigation"
-import { EmergencyFeedback } from "@/components/emergency-feedback"
+import { EmergencyFeedback, EmergencyResponse } from "@/components/emergency-feedback"
 import { QuickSettingsMenu } from "@/components/quick-settings-menu"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { HelpRequestNotification } from "@/components/help-request-notification"
-import { TutorialButton } from "@/components/tutorial-button"
 import { useUser } from "@/contexts/user-context"
+import { apiClient } from "@/lib/api-client"
 
+let check_for_updates = false;
 export default function HomeScreen() {
   const router = useRouter()
   const isMobile = useMobile()
   const [mounted, setMounted] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [emergencyMode, setEmergencyMode] = useState(false)
+  const [emergencyResponse, setEmergencyResponse] = useState(false)
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false)
   const [showHelpRequest, setShowHelpRequest] = useState(false)
   const [requesterName, setRequesterName] = useState("John")
@@ -32,6 +34,60 @@ export default function HomeScreen() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+async function checkForDistress(){
+  const request_response = await apiClient.checkForDistress()
+  if (request_response.response === "true"){
+    setEmergencyResponse(true);
+    localStorage.setItem("requestSessionID", request_response.reason)
+  } else {
+    setEmergencyResponse(false);
+    localStorage.setItem("requestSessionID", "")
+  }
+  return 
+}
+
+async function answerToDistress(){
+  const request_session_obj= localStorage.getItem("requestSessionID")
+  if (request_session_obj){
+    await apiClient.answerToDistress(request_session_obj)
+  }
+  localStorage.setItem("requestSessionID", "")
+  setEmergencyResponse(false);
+  check_for_updates = true
+  
+  return 
+}
+
+async function checkForResponse(){
+  const request_session_obj= localStorage.getItem("requestSessionID")
+  if (request_session_obj){
+    const request_sesh = JSON.parse(request_session_obj)
+    const check_answered = await apiClient.checkRequestStatus(request_sesh.requestSessionID)
+    if (check_answered.response === "true")
+      setEmergencyMode(false);
+  }
+  return 
+}
+
+//check for requests
+useEffect(() => {
+    const interval = setInterval( async () => {
+      if (check_for_updates === false)
+        return ;
+      await checkForDistress();
+    }, 2000); // 2000 ms = 2 seconds
+    return () => clearInterval(interval);
+  }, []);
+//check for response
+useEffect(() => {
+    const interval = setInterval( async () => {
+      if (check_for_updates === false)
+        return ;
+      await checkForResponse();
+    }, 2000); // 2000 ms = 2 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   // Get user's location on mount
   useEffect(() => {
@@ -53,10 +109,17 @@ export default function HomeScreen() {
 
     // Handle direct call for help
     if (action === "Call for Help") {
-      const success = await sendDistressSignal()
-      if (success) {
-        setEmergencyMode(true)
-        setStatusMessage("Emergency assistance requested. Help is on the way.")
+      let current_user = localStorage.getItem("userProfile")
+      if (current_user)
+      {
+        check_for_updates = false
+        const current_user_json = JSON.parse(current_user)
+        const req_distress_signal = await apiClient.sendDistressSignal(current_user_json.displayName, current_user_json.sessionID, "0", "0", current_user_json.displayName)
+        if (req_distress_signal.response === "true") {
+          setEmergencyMode(true)
+          setStatusMessage("Emergency assistance requested. Help is on the way.")
+          localStorage.setItem("helpRequest", "true");
+        }
       }
       return
     }
@@ -111,25 +174,19 @@ export default function HomeScreen() {
 
   const toggleAvailability = async (checked: boolean) => {
     const success = await updateAvailability(checked)
-    if (success) {
-      setStatusMessage(
-        checked
+     if (check_for_updates === false){
+      check_for_updates = true;
+    } else {
+      check_for_updates = false;
+    }
+    setStatusMessage(
+        check_for_updates
           ? "You are now available to receive help requests"
           : "You are no longer available to receive help requests",
       )
-
-      // Simulate receiving a help request after becoming available (for demo purposes)
-      if (checked) {
-        setTimeout(() => {
-          setRequesterName(["John", "Sarah", "Miguel", "Emma"][Math.floor(Math.random() * 4)])
-          setShowHelpRequest(true)
-        }, 5000)
-      }
-
       setTimeout(() => {
         setStatusMessage(null)
       }, 3000)
-    }
   }
 
   const handleLogout = () => {
@@ -149,7 +206,7 @@ export default function HomeScreen() {
           {/* Header with buttons in top corners */}
           <header className="mb-8 relative">
             {/* Left settings button */}
-            <div className="absolute top-0 left-0">
+            {/* <div className="absolute top-0 left-0">
               <Button
                 variant="outline"
                 size="lg"
@@ -161,7 +218,7 @@ export default function HomeScreen() {
               >
                 <Settings className="w-6 h-6" aria-hidden="true" />
               </Button>
-            </div>
+            </div> */}
 
             {/* Right accessibility button */}
             <div className="absolute top-0 right-0">
@@ -180,27 +237,27 @@ export default function HomeScreen() {
               <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50 md:text-4xl">
                 {"AccessLink"}
               </h1>
-              <p className="mt-2 text-xl text-slate-700 dark:text-slate-300" id="page-description">
+              {/* <p className="mt-2 text-xl text-slate-700 dark:text-slate-300" id="page-description">
                 Welcome back, {user.name || user.email}
-              </p>
+              </p> */}
 
               <div className="flex items-center justify-center mt-4 space-x-2">
                 <div
                   className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    user.isAvailable
+                    check_for_updates
                       ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                       : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
                   }`}
                 >
-                  {user.isAvailable ? "Available to help others" : "Unavailable to help"}
+                  {check_for_updates ? "Available to help others" : "Unavailable to help"}
                 </div>
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="availability-toggle"
-                    checked={user.isAvailable}
+                    checked={check_for_updates}
                     onCheckedChange={toggleAvailability}
                     aria-label={
-                      user.isAvailable ? "Set yourself as unavailable to help" : "Set yourself as available to help"
+                      check_for_updates ? "Set yourself as unavailable to help" : "Set yourself as available to help"
                     }
                   />
                 </div>
@@ -228,28 +285,28 @@ export default function HomeScreen() {
                 shortcutKey="2"
               />
 
-              <ActionButton
+              {/* <ActionButton
                 icon={<Cpu className="w-8 h-8" aria-hidden="true" />}
                 label="Gadgets"
                 description="Manage your connected devices"
                 color="bg-amber-700 hover:bg-amber-800 focus-visible:ring-amber-500"
                 onClick={() => handleAction("Gadgets")}
                 shortcutKey="3"
-              />
+              /> */}
 
               <ActionButton
                 icon={<BarChart3 className="w-8 h-8" aria-hidden="true" />}
                 label="Reports"
-                description="View your activity reports"
+                description="View nearby reports"
                 color="bg-purple-700 hover:bg-purple-800 focus-visible:ring-purple-500"
                 onClick={() => handleAction("Reports")}
-                shortcutKey="4"
+                shortcutKey="3"
               />
             </div>
           </nav>
 
           <footer className="mt-12 flex flex-col items-center gap-4">
-            <TutorialButton />
+            {/* <TutorialButton /> */}
             <Button
               variant="outline"
               className="flex items-center gap-2 min-h-[44px] px-6"
@@ -265,12 +322,27 @@ export default function HomeScreen() {
 
       {/* User Settings Dialog */}
       <QuickSettingsMenu isOpen={quickSettingsOpen} onClose={() => setQuickSettingsOpen(false)} />
-
       <EmergencyFeedback
         isVisible={emergencyMode}
+        onClose={async () => {
+        let current_user = localStorage.getItem("userProfile")
+        if (current_user)
+        {
+          const current_user_json = JSON.parse(current_user)
+          await apiClient.answerToDistress(current_user_json.sessionID)
+        }
+        setEmergencyMode(false)
+        setStatusMessage("Emergency request cancelled.")
+        setTimeout(() => setStatusMessage(null), 3000)
+        }}
+      />
+      <EmergencyResponse
+        isVisible={emergencyResponse}
         onClose={() => {
-          setEmergencyMode(false)
-          setStatusMessage("Emergency request cancelled.")
+          answerToDistress()
+          setEmergencyResponse(false)
+          setStatusMessage("Emergency Reponse Reacted To!")
+          check_for_updates = false
           setTimeout(() => setStatusMessage(null), 3000)
         }}
       />
@@ -292,7 +364,7 @@ interface ActionButtonProps {
   onClick: () => void
   shortcutKey: string
 }
-
+// function 
 function ActionButton({ icon, label, description, color, onClick, shortcutKey }: ActionButtonProps) {
   // Add keyboard shortcut support
   useEffect(() => {
