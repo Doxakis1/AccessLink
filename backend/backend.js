@@ -40,7 +40,8 @@ class acUser {
    user_availability = "false"; // default false and yes... string lol
    extra_params = []; // for future usage.
    constructor(params){
-      for (const key of params){
+	   console.log(params);
+      for (const key in params){
          if (key === "name")
          {
             this.name = params[key];
@@ -60,7 +61,9 @@ class acUser {
 }
 
 async function userSignUp(params){
-   if (!(params.includes("email")) || !(params.includes("password")))
+	console.log(params)
+   if (!(params.hasOwnProperty("email")) ||
+		   !(params.hasOwnProperty("password")))
    {
       return new acResponse("false", "Incomplete sign up form");
    }
@@ -83,7 +86,10 @@ async function userSignUp(params){
 
 
 async function userUpdateLocation(params){
-   if (!["email", "session_id", "user_location_lat", "user_location_mag"].every(type => params.includes(type)))
+   if (!["email", "session_id",
+		   "user_location_lat",
+		   "user_location_mag"].every(type =>
+			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Faulty location update");
    }
@@ -107,7 +113,10 @@ async function userUpdateLocation(params){
 }
 
 async function userUpdateAvailability(params){
-   if (!["email", "session_id", "user_availability", "user_location_mag"].every(type => params.includes(type)))
+   if (!["email", "session_id",
+		   "user_availability",
+		   "user_location_mag"].every(type =>
+			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Faulty availability update");
    }
@@ -128,18 +137,18 @@ async function userUpdateAvailability(params){
 }
 
 async function userSignal(params){
-   if (!["email", "session_id", "user_location_lat", "user_location_mag"].every(type => params.includes(type)))
+   if (!["email", "session_id"].every(type =>
+			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Incomplete signal formation");
    }
    const release = await user_mutex.acquire(); 
    try {
       for (user of logged_in_users){
+		  console.log(params.email)
+		  console.log(user.email)
          if (params.email === user.email)
          {
-            if (params.session_id !== user.session_id){
-               return new acResponse("false", "Incomplete signal formation"); //TODO: consider allowing all signals anyways
-            }
             const release_sig = await sig_mutex.acquire();
             distress_signal_list.push(new acDistressSignal(params));
             release_sig();
@@ -154,7 +163,8 @@ async function userSignal(params){
 }
 
 async function userRemoveSignal(params){
-   if (!["email", "session_id"].every(type => params.includes(type)))
+   if (!["email", "session_id"].every(type =>
+			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Incomplete signal removal formation");
    }
@@ -175,7 +185,9 @@ async function userRemoveSignal(params){
 }
 
 async function userRespondSignal(params){
-   if (!["email", "session_id", "signal_session_id"].every(type => params.includes(type)))
+   if (!["email", "session_id",
+		   "signal_session_id"].every(type =>
+			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Incomplete signal response formation");
    }
@@ -194,8 +206,22 @@ async function userRespondSignal(params){
    return new acResponse("false", "Incorrect signal response formation");
 }
 
+async function  userCheckDistress(params){
+   const release = await sig_mutex.acquire(); 
+   try {
+      for (signal of distress_signal_list) {
+         return new acResponse("true", signal.session_id);
+      }
+   }
+   finally {
+      release()
+   }
+   return new acResponse("false", "Incorrect request formation");
+}
+
 async function userLogin(params){
-   if (!["email", "password"].every(type => params.includes(type)))
+   if (!["email", "password"].every(type =>
+			   params.hasOwnProperty(type)))
    {
       return new acResponse("false", "Incomplete log in form");
    }
@@ -222,7 +248,7 @@ async function userLogin(params){
 // cookie stuff:
 //document.cookie = "username=John Doe; expires=Thu, 18 Dec 2013 12:00:00 UTC; path=/";
 class acReq {
-   valid_req_types = ["login", "sign_up", "signal", "ask_ai", "update_location", "update_availability", "remove_signal", "respond_signal"];
+   valid_req_types = ["login","check_distress", "sign_up", "signal", "ask_ai", "update_location", "update_availability", "remove_signal", "respond_signal"];
    req_type =  ""; // request_type
    session_id = ""; //session_id
    extra_params = {}; // for future usage.
@@ -235,18 +261,17 @@ class acReq {
          }
          else if (key === "session_id")
             this.session_id = params[key];
-         else {
-            this.extra_params.key = params[key];
-         }
       }
-      if (!(this.req_type in this.valid_req_types)){
+	  this.extra_params = params;
+      if
+		  (!this.valid_req_types.includes(this.req_type)){
          this.is_valid_req = false;
          return ;
       }
    }
    async handleRequest(){
       // valid_req_types = ["login", "sign_up", "signal", "ask_ai"];
-      request_ret = {};
+      let request_ret = {};
       switch (this.req_type){
          case "login":
             request_ret = await userLogin(this.extra_params);
@@ -261,14 +286,16 @@ class acReq {
             request_ret = await userUpdateAvailability(this.extra_params);
             break;
          case "signal":
-            request_ret = await userSignal();
+            request_ret = await userSignal(this.extra_params);
             break;
          case "remove_signal":
-            request_ret = await userRemoveSignal();
+            request_ret = await userRemoveSignal(this.extra_params);
             break;
          case "respond_signal":
-            request_ret = await userRespondSignal();
+            request_ret = await userRespondSignal(this.extra_params);
             break;
+		 case "check_distress":
+			request_ret = await userCheckDistress(this.extra_params);
          case "ask_ai":
             // request_ret = userAskAI();
             break;
@@ -287,17 +314,24 @@ const options = {
   cert: fs.readFileSync('/etc/letsencrypt/live/www.codingwithdox.com/cert.pem')
 };
 
+//app.use((req, res, next) => {
+//    res.removeHeader("Access-Control-Allow-Origin");
+//    next();
+//});
+
 app.get('/app', async function(req, res){
+	res.setHeader("Access-Control-Allow-Origin", "*");
    const data = JSON.parse(JSON.stringify(req.query));
    if ( data === undefined ||  Object.keys(data).length === 0)
    {
-      res.send(`{success: "false", error_message: "Invalid request data"}`);
+   	  res.send(new acResponse("false", "Invalid request data"));
    }
-   const new_request = acReq(data);
+   console.log(data);
+   const new_request = new acReq(data);
    console.log(new_request);
    if (new_request.is_valid_req === false)
    {
-      res.send(`{success: "false", error_message: "Unknown request type"}`);
+   	  res.send(new acResponse("false", "Invalid request data"));
       return ;
    }
    request_ret = await new_request.handleRequest();
@@ -306,6 +340,7 @@ app.get('/app', async function(req, res){
 });
 
 app.post('/app', async function(req, res){
+	res.setHeader("Access-Control-Allow-Origin", "*");
    const obj = req.body;		
    console.log("We got username: ", obj);
    if (obj?.name){
